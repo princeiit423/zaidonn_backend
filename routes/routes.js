@@ -34,11 +34,11 @@ async function seedAdmin() {
   const existing = await storage.getUserByUsername("admin");
   if (!existing) {
     await storage.createUser({
-      username: "admin",
-      password: "admin123",
+      username: "zaidonn",
+      password: "consult123",
       name: "Administrator",
       role: "admin",
-      email: "admin@zaidonn.com",
+      email: "zntax2023@gmail.com",
     });
     console.log("Default admin created: admin / admin123");
   }
