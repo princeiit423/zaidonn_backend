@@ -276,14 +276,43 @@ const result = await new Promise((resolve, reject) => {
   });
 
   app.put("/api/inquiries/:id/respond", requireAdmin, async (req, res) => {
+  try {
     const { response } = req.body;
 
-    const inquiry = await storage.respondToInquiry(req.params.id, response);
-    if (!inquiry) return res.status(404).json({ message: "Inquiry not found" });
+    if (!response) {
+      return res.status(400).json({ message: "Response is required" });
+    }
 
-    res.json(inquiry);
-  });
+    // 🔹 Inquiry find karo
+    const inquiry = await Inquiry.findById(req.params.id);
+    if (!inquiry) {
+      return res.status(404).json({ message: "Inquiry not found" });
+    }
 
+    // 🔹 Inquiry update karo
+    inquiry.adminResponse = response;
+    inquiry.status = "resolved";
+    inquiry.respondedAt = new Date();
+    await inquiry.save();
+
+    // 🔹 Notification create karo (admin reply ke saath)
+    await Notification.create({
+      userId: inquiry.clientId,
+      title: "Your Inquiry Has Been Answered",
+      message: `Admin replied: "${response}"`,
+      type: "success",
+    });
+
+    res.json({
+      message: "Response sent and notification created",
+      inquiry,
+    });
+
+  } catch (error) {
+    console.error("Error responding to inquiry:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
   // ================= NOTIFICATIONS =================
 
   app.get("/api/notifications", requireAuth, async (req, res) => {
