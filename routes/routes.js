@@ -60,7 +60,7 @@ async function registerRoutes(app) {
     })
   );
 
-  await seedAdmin();
+  // await seedAdmin();
 
   // ================= AUTH =================
 
