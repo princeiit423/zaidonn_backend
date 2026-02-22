@@ -30,19 +30,19 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-async function seedAdmin() {
-  const existing = await storage.getUserByUsername("admin");
-  if (!existing) {
-    await storage.createUser({
-      username: "zaidonn",
-      password: "consult123",
-      name: "Administrator",
-      role: "admin",
-      email: "zntax2023@gmail.com",
-    });
-    console.log("Default admin created: admin / admin123");
-  }
-}
+//async function seedAdmin() {
+//  const existing = await storage.getUserByUsername("admin");
+//  if (!existing) {
+//    await storage.createUser({
+//      username: "zaidonn",
+//      password: "consult123",
+ //     name: "Administrator",
+  //    role: "admin",
+  //    email: "zntax2023@gmail.com",
+  //  });
+  //  console.log("Default admin created: admin / admin123");
+ // }
+// }
 
 async function registerRoutes(app) {
 
