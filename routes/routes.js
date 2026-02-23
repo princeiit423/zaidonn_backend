@@ -121,7 +121,7 @@ async function registerRoutes(app) {
     res.json(safe);
   });
 
-  app.post("/api/clients", requireAdmin, async (req, res) => {
+  app.post("/api/clients", async (req, res) => {
     try {
       const {
         username,
