@@ -297,12 +297,32 @@ async function registerRoutes(app) {
     res.status(201).json(inquiry);
   });
 
-  app.put("/api/inquiries/:id/respond", requireAdmin, async (req, res) => {
+app.put("/api/inquiries/:id/respond", requireAdmin, async (req, res) => {
+  try {
     const { response } = req.body;
-    const inquiry = await storage.respondToInquiry(req.params.id, response);
-    if (!inquiry) return res.status(404).json({ message: "Inquiry not found" });
+
+    const inquiry = await storage.respondToInquiry(
+      req.params.id,
+      response
+    );
+
+    if (!inquiry) {
+      return res.status(404).json({ message: "Inquiry not found" });
+    }
+
+    // ⭐ Notification create karo
+    await storage.createNotification({
+      userId: inquiry.clientId,  // jis client ne inquiry bheji thi
+      title: "Inquiry Responded",
+      message: `Your inquiry "${inquiry.subject}" has been responded by admin.`,
+      type: "success",
+    });
+
     res.json(inquiry);
-  });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to respond inquiry" });
+  }
+});
   // ================= NOTIFICATIONS =================
 
   app.get("/api/notifications", requireAuth, async (req, res) => {
