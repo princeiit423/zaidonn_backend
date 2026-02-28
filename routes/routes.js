@@ -4,7 +4,9 @@ const { createServer } = require("http");
 const bcrypt = require("bcryptjs");
 const { v2: cloudinary } = require("cloudinary");
 const storage = require("../storage/storage");
-
+const generateToken = require("../utils/generateToken");
+//const { requireAuth, requireAdmin } = require("../middlewares/auth");
+const auth = require("../middlewares/auth");
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -16,19 +18,19 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-function requireAuth(req, res, next) {
-  if (!req.session.userId) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  next();
-}
+//function requireAuth(req, res, next) {
+//  if (!req.session.userId) {
+//    return res.status(401).json({ message: "Unauthorized" });
+//  }
+//  next();
+//}
 
-function requireAdmin(req, res, next) {
-  if (!req.session.userId || req.session.role !== "admin") {
-    return res.status(403).json({ message: "Forbidden" });
-  }
-  next();
-}
+//function requireAdmin(req, res, next) {
+//  if (!req.session.userId || req.session.role !== "admin") {
+//    return res.status(403).json({ message: "Forbidden" });
+//  }
+//  next();
+// }
 
 //async function seedAdmin() {
 //  const existing = await storage.getUserByUsername("admin");
@@ -63,15 +65,9 @@ async function registerRoutes(app) {
 
   // ================= AUTH =================
 
-  app.post("/api/auth/login", async (req, res) => {
+   app.post("/api/auth/login", async (req, res) => {
     try {
       const { username, password } = req.body;
-
-      if (!username || !password) {
-        return res
-          .status(400)
-          .json({ message: "Username and password required" });
-      }
 
       const user = await storage.getUserByUsername(username);
       if (!user)
@@ -81,20 +77,20 @@ async function registerRoutes(app) {
       if (!valid)
         return res.status(401).json({ message: "Invalid credentials" });
 
-      req.session.userId = user._id.toString();
-      req.session.role = user.role;
+      const token = generateToken(user);
 
       const safeUser = user.toObject();
       delete safeUser.password;
 
-      res.json(safeUser);
+      res.json({ user: safeUser, token });
+
     } catch (err) {
       res.status(500).json({ message: "Login failed" });
     }
   });
 
-  app.get("/api/auth/me", requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId);
+  app.get("/api/auth/me", auth, async (req, res) => {
+    const user = await storage.getUser(req.user.id);
     if (!user) return res.status(401).json({ message: "User not found" });
 
     const safeUser = user.toObject();
@@ -102,7 +98,6 @@ async function registerRoutes(app) {
 
     res.json(safeUser);
   });
-
   app.post("/api/auth/logout", (req, res) => {
     req.session.destroy(() => {
       res.json({ message: "Logged out" });
@@ -111,7 +106,7 @@ async function registerRoutes(app) {
 
   // ================= CLIENTS =================
 
-  app.get("/api/clients", requireAdmin, async (req, res) => {
+  app.get("/api/clients", auth, async (req, res) => {
     const clients = await storage.getAllClients();
     const safe = clients.map((c) => {
       const obj = c.toObject();
@@ -121,7 +116,7 @@ async function registerRoutes(app) {
     res.json(safe);
   });
 
-  app.post("/api/clients", requireAdmin, async (req, res) => {
+  app.post("/api/clients", auth, async (req, res) => {
     try {
       const {
         username,
@@ -173,7 +168,7 @@ async function registerRoutes(app) {
     }
   });
 
-  app.put("/api/clients/:id", requireAdmin, async (req, res) => {
+  app.put("/api/clients/:id", auth, async (req, res) => {
     const updated = await storage.updateUser(req.params.id, req.body);
     if (!updated) return res.status(404).json({ message: "Client not found" });
 
@@ -183,7 +178,7 @@ async function registerRoutes(app) {
     res.json(safe);
   });
 
-  app.delete("/api/clients/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/clients/:id", auth, async (req, res) => {
     const deleted = await storage.deleteUser(req.params.id);
     if (!deleted) return res.status(404).json({ message: "Client not found" });
 
@@ -192,10 +187,10 @@ async function registerRoutes(app) {
 
   // ================= DOCUMENTS =================
 
-  app.get("/api/documents", requireAuth, async (req, res) => {
+  app.get("/api/documents", auth, async (req, res) => {
     const { clientId, category, financialYear, month } = req.query;
 
-    const cid = req.session.role === "admin" ? clientId : req.session.userId;
+    const cid = req.user.role === "admin" ? clientId : req.user.id;
 
     const docs = await storage.getDocuments(
       cid,
@@ -208,7 +203,7 @@ async function registerRoutes(app) {
 
   app.post(
     "/api/documents/upload",
-    requireAuth,
+    auth,
     upload.single("file"),
     async (req, res) => {
       try {
@@ -251,7 +246,7 @@ async function registerRoutes(app) {
           month: month || null,
           cloudinaryUrl: result.secure_url,
           cloudinaryPublicId: result.public_id,
-          uploadedBy: req.session.userId,
+          uploadedBy: req.user.id,
         });
 
         res.status(201).json(doc);
@@ -262,7 +257,7 @@ async function registerRoutes(app) {
     },
   );
 
-  app.delete("/api/documents/:id", requireAuth, async (req, res) => {
+  app.delete("/api/documents/:id", auth, async (req, res) => {
     const doc = await storage.getDocument(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found" });
 
@@ -274,21 +269,20 @@ async function registerRoutes(app) {
 
   // ================= INQUIRIES =================
 
-  app.get("/api/inquiries", requireAuth, async (req, res) => {
-    const clientId =
-      req.session.role === "admin" ? undefined : req.session.userId;
-
+  app.get("/api/inquiries", auth, async (req, res) => {
+    //const clientId = req.user.id;
+      const clientId = req.user.role === "admin" ? undefined : req.user.id
     const list = await storage.getInquiries(clientId);
     res.json(list);
   });
 
-  app.post("/api/inquiries", requireAuth, async (req, res) => {
+  app.post("/api/inquiries", auth, async (req, res) => {
     const { subject, message } = req.body;
 
-    const user = await storage.getUser(req.session.userId);
+    const user = await storage.getUser(req.user.id);
 
     const inquiry = await storage.createInquiry({
-      clientId: req.session.userId,
+      clientId: req.user.id,
       clientName: user?.name || "Unknown",
       subject,
       message,
@@ -297,30 +291,39 @@ async function registerRoutes(app) {
     res.status(201).json(inquiry);
   });
 
-  app.put("/api/inquiries/:id/respond", requireAdmin, async (req, res) => {
-    const { response } = req.body;
-    const inquiry = await storage.respondToInquiry(req.params.id, response);
-    if (!inquiry) return res.status(404).json({ message: "Inquiry not found" });
-    res.json(inquiry);
+  app.put("/api/inquiries/:id/respond", auth, async (req, res) => {
+  const { response } = req.body;
+  const inquiry = await storage.respondToInquiry(req.params.id, response);
+  if (!inquiry) return res.status(404).json({ message: "Inquiry not found" });
+
+  // ✅ AUTO NOTIFY CLIENT — inquiry answered
+  await storage.createNotification({
+    userId: inquiry.clientId,
+    title: "Your Inquiry Has Been Answered",
+    message: `Admin has responded to your inquiry: "${inquiry.subject}"`,
+    type: "inquiry",
   });
+
+  res.json(inquiry);
+});
   // ================= NOTIFICATIONS =================
 
-  app.get("/api/notifications", requireAuth, async (req, res) => {
-    const list = await storage.getNotifications(req.session.userId);
+  app.get("/api/notifications", auth, async (req, res) => {
+    const list = await storage.getNotifications(req.user.id);
     res.json(list);
   });
 
-  app.put("/api/notifications/:id/read", requireAuth, async (req, res) => {
+  app.put("/api/notifications/:id/read", auth, async (req, res) => {
     await storage.markNotificationRead(req.params.id);
     res.json({ message: "Marked as read" });
   });
 
-  app.put("/api/notifications/read-all", requireAuth, async (req, res) => {
-    await storage.markAllNotificationsRead(req.session.userId);
+  app.put("/api/notifications/read-all", auth, async (req, res) => {
+    await storage.markAllNotificationsRead(req.user.id);
     res.json({ message: "All marked as read" });
   });
 
-  app.post("/api/notifications", requireAdmin, async (req, res) => {
+  app.post("/api/notifications", auth, async (req, res) => {
     const { userId, title, message, type } = req.body;
 
     const notification = await storage.createNotification({
