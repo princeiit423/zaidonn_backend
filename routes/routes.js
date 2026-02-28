@@ -116,7 +116,7 @@ async function registerRoutes(app) {
     res.json(safe);
   });
 
-  app.post("/api/clients", auth, async (req, res) => {
+  app.post("/api/clients",auth, async (req, res) => {
     try {
       const {
         username,
