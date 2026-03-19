@@ -62,6 +62,28 @@ async function registerRoutes(app) {
   );
 
   // await seedAdmin();
+  
+  // home route
+  app.get("/", async (req, res) => {
+  try {
+    // You can put any logic here
+    const message = "✅ Backend is running successfully!";
+
+    res.status(200).json({
+      success: true,
+      message,
+    });
+
+  } catch (error) {
+    console.error("Error in / route:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "❌ Internal Server Error",
+    });
+  }
+});
+
 
   // ================= AUTH =================
 
